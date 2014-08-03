@@ -5,6 +5,9 @@
 
 package require md5
 package require tls
+package require sqlite3
+
+sqlite3 ircdb ./irc.db
 
 array set dispnames {}
 array set idents {}
@@ -18,6 +21,7 @@ array set servers {}
 array set aways {}
 array set servnick {}
 array set modes {}
+array set extinfo {}
 
 namespace eval config {
 	array set me {}
@@ -42,6 +46,16 @@ proc getnickbyfd {nick} {
 			return $nic
 		}
 	}
+}
+
+proc login {fd user pass} {
+	set chk [::md5::md5 -hex [::md5::md5 -hex $pass]]
+	
+}
+
+proc register {fd user pass} {
+	set chk [::md5::md5 -hex [::md5::md5 -hex $pass]]
+	
 }
 
 proc makessl {fd} {
@@ -126,7 +140,7 @@ proc checknickname {nick} {
 		return 0
 	}
 	foreach {char} [split $fishy {}] {
-		if {[string index $nick 0] == $char} {return 0}
+		if {[string match "${char}*" $nick]} {return 0}
 	}
 	foreach {letter} [split $nick {}] {
 		foreach {goodchar} [split $good {}] {
@@ -145,6 +159,7 @@ proc checknickname {nick} {
 proc chgnick {chan nick} {
 	if {![checknickname $nick]} {
 		message'fd $chan $::config::me(server) [list "433" "$::dispnames($chan)" "$nick" "The nickname you have chosen is erroneous. Pick another."]
+		return
 	}
 	if {[getfdbynick $nick] != ""} {
 		message'fd $chan $::config::me(server) [list "433" "$::dispnames($chan)" "$nick" "The nickname you have chosen is already in use. Pick another."]
@@ -209,15 +224,15 @@ proc client'connfooter {chan nick ident addr} {
 	message'fd $chan $::config::me(server) [list "001" "$nick" "Welcome to the Internet Relay Network."]
 	message'fd $chan $::config::me(server) [list "002" "$nick" "Your host is $::config::me(server), running version tclchatd0.1 IRC protocol version 2.7"]
 	message'fd $chan $::config::me(server) [list "003" "$nick" "We never started. :P"]
-	message'fd $chan $::config::me(server) [list "004" "$nick" "$::config::me(server) tclchatd0.1 ZSaoisw bimnlsptkheI beIklohv"]
-	message'fd $chan $::config::me(server) [list "005" "$nick" "PREFIX=(ohv)@%+" "CHANMODES=beI,k,l,imnspt" "CHANTYPES=#&!+" "IDCHAN=!:5" "FNC" "are supported by this server"]
+	message'fd $chan $::config::me(server) [list "004" "$nick" "$::config::me(server) tclchatd0.1 ZSaoisw bimnlsptkoOHVheI beIklohvOHV"]
+	message'fd $chan $::config::me(server) [list "005" "$nick" "PREFIX=(ohv)@%+" "CHANMODES=beIOHV,k,l,imnspt" "CHANTYPES=#&!+" "IDCHAN=!:5" "FNC" "are supported by this server"]
 	set lusers [expr {int([array size ::dispnames]/2)+1}]
 	message'fd $chan $::config::me(server) [list "251" "$nick" "$lusers" "0" "There are $lusers users and 0 invisible on 1 server"]
-	message'fd $chan $::config::me(server) [list "375" "$nick" "- Begin MOTD"]
+	message'fd $chan $::config::me(server) [list "375" "$nick" "Begin MOTD"]
 	foreach {lotd} $::config::me(motd) {
 		message'fd $chan $::config::me(server) [list "372" "$nick" "- $lotd"]
 	}
-	message'fd $chan $::config::me(server) [list "376" "$nick" "- End of MOTD for $dispnames($chan)!$idents($chan)@$hostnames($chan)"]
+	message'fd $chan $::config::me(server) [list "376" "$nick" "End of MOTD for $dispnames($chan)!$idents($chan)@$hostnames($chan)"]
 	chan event $chan readable ""
 	chan event $chan readable [list client'reg $chan $addr]
 }
@@ -317,19 +332,20 @@ proc chan'names {chan room} {
 }
 
 proc hasmode {room mode} {
-	foreach {mchar} [split $::rooms(mode,$room) {}] {
+	foreach {mchar} [split [chan'retmode $room] {}] {
 		if {$mchar == $mode} {return 1}
 	}
 	return 0
 }
 
-proc chan'adduser {fd room} {
+proc chan'adduser {fd room {apass ""}} {
 	global rooms
 	set canjoin 0
 	set banned 0
 	set newchan 0
+	set mods ""
 	set chan $fd
-	if {[info exists rooms($room)]} {if {[llength $rooms($room)] == 0} {
+	if {![hasmode $room "r"]} {if {[info exists rooms($room)]} {if {[llength $rooms($room)] == 0} {
 		set rooms($room) [list]
 		set rooms(mode,$room) "nst"
 		set canjoin 2
@@ -339,7 +355,7 @@ proc chan'adduser {fd room} {
 		set rooms(mode,$room) "nst"
 		set canjoin 2
 		set newchan 1
-	}
+	} }
 	if {[hasmode $room "i"]} {set canjoin 0}
 	if {$canjoin != 2} {
 		set canjoin 1
@@ -356,12 +372,34 @@ proc chan'adduser {fd room} {
 				set canjoin 1
 			}
 		} }
-		if {[info exists ::rooms(list,$room,e)]} {
+		if {[info exists ::rooms(list,$room,I)]} {
 		foreach {banmask} $::rooms(list,$room,I) {
 			if {[string match -nocase $banmask "$::dispnames($fd)!$::idents($fd)@$::hostnames($fd)"]} {
 				if {[hasmode $room "i"] && !$banned} {set canjoin 1}
 			}
 		} }
+		if {$apass == ""} {set zzzzzzzzzzzzzzzzzzzzzzz z} {
+		if {[info exists ::rooms(list,$room,O)]} {
+		foreach {banmask} $::rooms(list,$room,O) {
+			if {$banmask == $apass} {
+				if {!$banned} {set canjoin 1
+				lappend rooms(list,$room,o) "$fd"
+				append mods o}
+			}
+		} }
+		if {[info exists ::rooms(list,$room,H)]} {
+		foreach {banmask} $::rooms(list,$room,H) {
+			if {$banmask == $apass} {
+				if {!$banned} {set canjoin 1;lappend rooms(list,$room,h) "$fd";append mods h}
+			}
+		} }
+		if {[info exists ::rooms(list,$room,V)]} {
+		foreach {banmask} $::rooms(list,$room,V) {
+			if {$banmask == $apass} {
+				if {!$banned} {set canjoin 1;lappend rooms(list,$room,v) "$fd";append mods v}
+			}
+		} }
+		}
 	}
 	if {$canjoin == 0} {
 		message\'fd $fd "-|-!-@$::config::me(server)" [list "474" [getnickbyfd $fd] $room "You cannot join $room (Banned: $banned, Modes: [chan'retmode $room]) "]
@@ -372,7 +410,7 @@ proc chan'adduser {fd room} {
 		# User is already on channel.
 	}
 	if {$newchan} {
-		puts stdout "Channel created $room"
+		puts stdout "Channel created or apassed $room"
 		set rooms(list,$room,o) [list $fd]
 		set rooms(list,$room,h) [list]
 		set rooms(list,$room,v) [list]
@@ -380,6 +418,9 @@ proc chan'adduser {fd room} {
 	lappend rooms($room) $fd
 	sendtochannoc $fd $room "$::dispnames($chan)!$::idents($chan)@$::hostnames($chan)" [list "JOIN" $room]
 	message\'fdnoc $fd "$::dispnames($chan)!$::idents($chan)@$::hostnames($chan)" [list "JOIN" $room]
+	set modus [list "MODE" $room "+$mods"]
+	for {set x 0} {$x<[string length $mods]} {incr x} {lappend modus [getnickbyfd $fd]}
+	if {""!=$mods} {sendtochannoc $fd $room "$::dispnames($chan)!$::idents($chan)@$::hostnames($chan)" $modus}
 	chan'names $fd $room
 	chan'topic $fd $room -
 }
@@ -398,7 +439,7 @@ proc chan'canchgmode {src room state modeletter {param ""}} {
 	}
 	if {[info exists ::rooms(list,$room,h)]} {
 		foreach {surce} $::rooms(list,$room,h) {
-			if {$src == $surce} {if {$modeletter !="o"} {return 1}}
+			if {$src == $surce} {if {$modeletter !="o"} {if {$modeletter !="O"} {return 1}}}
 		}
 	}
 	return 0
@@ -441,6 +482,7 @@ proc chan'topic {src room {topic "-"}} {
 proc chan'chgmode {src room state modeletter param} {
 	global rooms
 	set lst 0
+	set oponly 0
 	switch $modeletter {
 		o {set lst 728}
 		h {set lst 728}
@@ -448,17 +490,23 @@ proc chan'chgmode {src room state modeletter param} {
 		b {set lst 367}
 		e {set lst 346}
 		I {set lst 348}
+		O {set lst 1728;set oponly 1}
+		H {set lst 1728;set oponly 1}
+		V {set lst 1728;set oponly 1}
 	}
 	if {$lst != 0 && ""==$param} {
 		if {![info exists ::rooms(list,$room,$modeletter)]} {set ::rooms(list,$room,$modeletter) [list]}
 		foreach {prm} $::rooms(list,$room,$modeletter) {
-			if {$lst > 500} {
-				message'fd $src "$::config::me(server)" [list "$lst" [getnickbyfd $src] "$room" $modeletter [getnickbyfd $prm]]
+			if {$lst == 728 || ($lst == 1728) && (!$oponly || [chan'canchgmode $src $room $state $modeletter $param])} {
+				if {$lst == 1728} {set lst 728} {set prm [getnickbyfd $prm]}
+				if {$oponly} {break}
+				message'fd $src "$::config::me(server)" [list "$lst" [getnickbyfd $src] "$room" $modeletter $prm]
 			} {
 				message'fd $src "$::config::me(server)" [list "$lst" [getnickbyfd $src] "$room" $prm]
 			}
 		}
 		if {$lst > 500} {
+			if {$lst > 1000} {set lst [expr {$lst - 1000}]}
 			message'fd $src "$::config::me(server)" [list "[expr {$lst+1}]" [getnickbyfd $src] "$room" $modeletter "End of +$modeletter list."]
 		} {
 			message'fd $src "$::config::me(server)" [list "[expr {$lst+1}]" [getnickbyfd $src] "$room" "End of +$modeletter list."]
@@ -467,7 +515,7 @@ proc chan'chgmode {src room state modeletter param} {
 	}
 	if {[chan'canchgmode $src $room $state $modeletter $param]} {
 		if {$lst > 100 && [string length $param] && ($state == "+")} {
-			if {$lst > 500} {set parm [getfdbynick $param]} {set parm $param}
+			if {$lst == 728} {set parm [getfdbynick $param]} {set parm $param}
 			lappend rooms(list,$room,$modeletter) $parm
 		}
 		if {$lst > 100 && [string length $param] && ($state == "-")} {
@@ -478,7 +526,11 @@ proc chan'chgmode {src room state modeletter param} {
 		if {!$lst && ($state == "-")} {set rooms(mode,$room) [string map [list $modeletter ""] $rooms(mode,$room)]}
 		set mch $state
 		append mch $modeletter
-		sendtochannoc $src $room "$::dispnames($src)!$::idents($src)@$::hostnames($src)" [list "MODE" $room $mch $param]
+		if {$oponly} {
+			sendtochannoc $src "list,$room,o" "$::dispnames($src)!$::idents($src)@$::hostnames($src)" [list "MODE" $room $mch $param]
+		} {
+			sendtochannoc $src $room "$::dispnames($src)!$::idents($src)@$::hostnames($src)" [list "MODE" $room $mch $param]
+		}
 		message'fdnoc $src "$::dispnames($src)!$::idents($src)@$::hostnames($src)" [list "MODE" $room $mch $param]
 	}
 }
@@ -559,12 +611,12 @@ proc client'reg {chan addr} {
 				}
 				if {$okchan && [lindex $msg 2]!="" && [lindex $msg 2]!=":" && [lindex $msg 2]!=" " } {
 					set state +
-					set ctr 1
+					set ctr 0
 					foreach {l} [split [lindex $msg 2] {}] {
 						if {$l == "+"} {set state +; continue}
 						if {$l == "-"} {set state -; continue}
 						switch -regexp $l {
-							"[ohvbeI]" {chan'chgmode $chan $chn $state $l [lindex $msg [expr {1+[incr ctr]}]]}
+							"[ohvbeIOHV]" {chan'chgmode $chan $chn $state $l [lindex $msg [expr {2+[incr ctr]}]]}
 							"[imnsptrSCN]" {chan'chgmode $chan $chn $state $l ""}
 						}
 					}
@@ -591,7 +643,7 @@ proc client'reg {chan addr} {
 		}
 
 		"join" {
-			foreach {chn} [split [lindex $msg 1] ","] {
+			foreach {chn} [split [lindex $msg 1] ","] {apass} [split [lindex $msg 2] ","] {
 				set okchan 0
 				switch [string index $chn 0] {
 					"#" {set okchan 1}
@@ -600,7 +652,8 @@ proc client'reg {chan addr} {
 					"+" {set okchan 1}
 				}
 				if {$okchan} {
-					chan'adduser $chan $chn
+					if {![info exists apass]} {set apass ""}
+					chan'adduser $chan $chn $apass
 				}
 			}
 		}
