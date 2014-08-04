@@ -3,9 +3,11 @@
 # TCL Chatd
 # Inspired by RONSOR's chat daemon
 
+# Obviously we require tcllib.
 package require md5
 package require tls
 package require sqlite3
+package require dns
 
 sqlite3 ircdb ./irc.db
 
@@ -64,6 +66,8 @@ proc makessl {fd} {
 	append modes($fd) "Z"
 }
 
+array set resolving {}
+
 proc accept {chan addr port} {
 	global hostnames dispnames idents realnames modes rhostnames aways
 	set modes($chan) ""
@@ -74,7 +78,20 @@ proc accept {chan addr port} {
 	set aways($chan) ""
 	set ctr 0
 	set xddr [string match "*:*" $addr]
-	if {$xddr} {set wddr ":"} {set wddr "."}
+	if {$xddr} {
+		set wddr ":"
+		set dnslen 1
+	} {
+		set dnslen 0
+		set wddr "."
+	}
+	if {$dnslen} {
+		set dnsddr [join [lreverse [split [join [split $addr ":"]] {}]] "."]
+		puts stdout $dnsddr
+	} {
+		set dnsddr [join [lreverse [split $addr "."]] "."]
+		puts stdout $dnsddr
+	}
 	set yddr [split $addr "$wddr"]
 	set zddr ""
 	if {$xddr} {foreach {x y} $yddr {
@@ -93,8 +110,8 @@ proc accept {chan addr port} {
 	append zddr "IP"
 	set hostnames($chan) $zddr
 	chan configure $chan -buffering line -blocking 0
-	chan puts $chan ":$::config::me(server) 020 * :$::config::me(welcome)"
-	chan event $chan readable [list client'unreg $chan $addr]
+	puts $chan ":$::config::me(server) 020 * :$::config::me(welcome)"
+	fileevent $chan readable [list client'unreg $chan $addr]
 }
 
 proc accept-ssl {chan addr port} {
@@ -130,8 +147,8 @@ proc accept-ssl {chan addr port} {
 	::tls::handshake $chan
 	chan configure $chan -buffering line -blocking 0
 
-	chan puts $chan ":$::config::me(server) 020 * :$::config::me(welcome)"
-	chan event $chan readable [list client'unreg $chan $addr]
+	puts $chan ":$::config::me(server) 020 * :$::config::me(welcome)"
+	fileevent $chan readable [list client'unreg $chan $addr]
 }
 
 proc checknickname {nick} {
@@ -246,8 +263,8 @@ proc client'connfooter {chan nick ident addr} {
 		message'fd $chan $::config::me(server) [list "372" "$nick" "- $lotd"]
 	}
 	message'fd $chan $::config::me(server) [list "376" "$nick" "End of MOTD for $dispnames($chan)!$idents($chan)@$hostnames($chan)"]
-	chan event $chan readable ""
-	chan event $chan readable [list client'reg $chan $addr]
+	fileevent $chan readable ""
+	fileevent $chan readable [list client'reg $chan $addr]
 	#server'introducecli $chan $::config::me(server)
 	sendtoallumode o $::config::me(server) [list "NOTICE" "*" "CONN $dispnames($chan)!$idents($chan)@$hostnames($chan) $::rhostnames($chan)"]
 }
@@ -257,7 +274,7 @@ proc gset {k v} {
 }
 
 proc getss {chan} {
-	return [string trim [chan gets $chan]]
+	return [string trim [gets $chan]]
 }
 
 proc client'unreg {chann addr} {
@@ -273,7 +290,7 @@ proc client'unreg {chann addr} {
 			set realnames($chan) [lindex $msg 4]
 			if {[info exists dispnames($chan)]} {
 				client'connfooter $chann $dispnames($chan) [lindex $msg 1] $::hostnames($chan)
-				chan event $chann readable [list client'reg $chan $addr]
+				fileevent $chann readable [list client'reg $chan $addr]
 			}
 		}
 		"pass" {
@@ -312,8 +329,9 @@ proc client'unreg {chann addr} {
 				}
 			}
 			if {[info exists idents($chan)] && [info exists dispnames($chan)]} {
+				if {!(""==$idents($chan))} {return}
 				client'connfooter $chann [lindex $msg 1] $idents($chan) $::hostnames($chan)
-				chan event $chann readable [list client'reg $chan $addr]
+				fileevent $chann readable [list client'reg $chan $addr]
 			}
 		}
 
@@ -805,7 +823,7 @@ proc sendtochannoc {sf room src zarg} {
 
 proc client'err {chan addr nick reason} {
 	global rooms
-	chan puts $chan ":$::config::me(server) ERROR :Closing link: $nick\[$addr\] ($reason)"
+	puts $chan ":$::config::me(server) ERROR :Closing link: $nick\[$addr\] ($reason)"
 	chan close $chan
 	client'eoc $chan "$reason"
 	foreach {room nqls} [array get ::rooms] {
@@ -831,21 +849,21 @@ proc message'send {nick src zarg} {
 	set wrt ":$src"
 	append wrt " [join [lrange $zarg 0 end-1] " "]"
 	append wrt " :[lindex $zarg end]"
-	chan puts [getfdbynick $nick] "$wrt"
+	puts [getfdbynick $nick] "$wrt"
 }
 
 proc message'fd {nick src zarg} {
 	set wrt ":$src"
 	append wrt " [join [lrange $zarg 0 end-1] " "]"
 	append wrt " :[lindex $zarg end]"
-	chan puts $nick "$wrt"
+	puts $nick "$wrt"
 }
 
 proc message'fdnoc {nick src zarg} {
 	set wrt ":$src"
 	append wrt " [join [lrange $zarg 0 end-1] " "]"
 	append wrt " [lindex $zarg end]"
-	chan puts $nick "$wrt"
+	puts $nick "$wrt"
 }
 
 proc stricmp {str1 str2} {
@@ -876,3 +894,64 @@ foreach {pblock} $::config::listen(sslport) {
 }
 
 vwait forever
+
+#	foreach {revsuf} $::config::me(reversesuffixes) {
+#		set treve [::dns::resolve -timeout 10000 -type PTR "$dnsddr.$revsuf"]
+#		::dns::wait $treve
+#		set reve [lindex [::dns::address $treve] 0]
+#
+#		set taaa [::dns::resolve -timeout 10000 -type A $reve]
+#		set taaaaa [::dns::resolve -timeout 10000 -type AAAA $reve]
+#		::dns::wait $taaa
+#		::dns::wait $taaaaa
+#		set aaa [lindex [::dns::address $taaa] 0]
+#		set aaaaa [lindex [::dns::address $taaaaa] 0]
+#		puts stdout "$reve $aaa $aaaaa"
+#		if {""!=$aaa} {
+#			if {$aaa==$addr} {
+#				message'fd $chan $::config::me(server) [list "020" "*" "*** Found your hostname: $reve The LAST of these messages takes precedence."]
+#				set rhostnames($chan) $reve
+#				set ctr 0
+#				set zddr ""
+#				foreach {x y} [split $reve "."] {
+#					incr ctr
+#					if {$ctr >= 3} {break}
+#					set w "$x"
+#					append w "$y"
+#					set srl [string length $w]
+#					set newad [string range [::md5::md5 -hex $w] 0 11]
+#					if {$ctr != 1} {append zddr "."}
+#					append zddr "$newad"
+#				}
+#				foreach {x} [lrange [split $reve "."] 2 end] {
+#					append zddr ".$x"
+#				}
+#				set hostnames($chan) $reve
+#			}
+#		}
+#		if {""!=$aaaaa} {
+#			if {$aaaaa==$addr} {
+#				message'fd $chan $::config::me(server) [list "020" "*" "*** Found your hostname: $reve The LAST of these messages takes precedence."]
+#				set rhostnames($chan) $reve
+#				set ctr 0
+#				set zddr ""
+#				foreach {x y} [split $reve "."] {
+#					incr ctr
+#					if {$ctr >= 3} {break}
+#					set w "$x"
+#					append w "$y"
+#					set srl [string length $w]
+#					set newad [string range [::md5::md5 -hex $w] 0 11]
+#					if {$ctr != 1} {append zddr "."}
+#					append zddr "$newad"
+#				}
+#				foreach {x} [lrange [split $reve "."] 2 end] {
+#					append zddr ".$x"
+#				}
+#				set hostnames($chan) $reve
+#			}
+#		}
+#		if {""==$aaa&&""==$aaaaa} {
+#		message'fd $chan $::config::me(server) [list "020" "*" "*** Could not look up your hostname."]
+#		}
+#	}
