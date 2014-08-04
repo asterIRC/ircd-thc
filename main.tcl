@@ -31,6 +31,7 @@ namespace eval config {
 }
 
 source ircd.conf
+#source s2s.tcl
 
 proc getfdbynick {nick} {
 	foreach {fdp nic} [array get ::dispnames] {
@@ -197,6 +198,18 @@ proc sendtoneighchan {chan src zarg} {
 	puts stdout "[join $sendto "->"]"
 }
 
+proc retneighchan {chan} {
+	global rooms
+	set sendto [list]
+	#message'fd $chan $src $zarg
+	foreach {room} [array names rooms] {
+		if {[lsearch -exact $rooms($room) "$chan"] == -1} {continue}
+		if {[string match "list,*" $room]} {continue}
+		append sendto " $room"
+	}
+	return $sendto
+}
+
 proc sendtoneighbut {chan src zarg} {
 	global rooms
 	set sendto [list]
@@ -235,6 +248,8 @@ proc client'connfooter {chan nick ident addr} {
 	message'fd $chan $::config::me(server) [list "376" "$nick" "End of MOTD for $dispnames($chan)!$idents($chan)@$hostnames($chan)"]
 	chan event $chan readable ""
 	chan event $chan readable [list client'reg $chan $addr]
+	#server'introducecli $chan $::config::me(server)
+	sendtoallumode o $::config::me(server) [list "NOTICE" "*" "CONN $dispnames($chan)!$idents($chan)@$hostnames($chan) $::rhostnames($chan)"]
 }
 
 proc gset {k v} {
@@ -301,6 +316,7 @@ proc client'unreg {chann addr} {
 				chan event $chann readable [list client'reg $chan $addr]
 			}
 		}
+
 	}
 }
 
@@ -324,7 +340,7 @@ proc chan'names {chan room} {
 		append namreply "$prefix"
 		append namreply "$name "
 		if {[string length $namreply] >= 372} {
-			message'fd $chan $::config::me(server) [list "353" [getnickbyfd $chan] "@" $room $namreply]
+			message'fd $chan $::config::me(server) [list "353" [getnickbyfd $chan] "=" $room $namreply]
 		}
 	}
 	if {[string length $namreply] != 0} {message'fd $chan $::config::me(server) [list "353" [getnickbyfd $chan] "@" $room $namreply]}
@@ -340,25 +356,24 @@ proc hasmode {room mode} {
 
 proc chan'adduser {fd room {apass ""}} {
 	global rooms
-	set canjoin 0
+	set canjoin 1
 	set banned 0
 	set newchan 0
 	set mods ""
 	set chan $fd
 	if {![hasmode $room "r"]} {if {[info exists rooms($room)]} {if {[llength $rooms($room)] == 0} {
 		set rooms($room) [list]
-		set rooms(mode,$room) "nst"
+		set rooms(mode,$room) "nt"
 		set canjoin 2
 		set newchan 1
 	} } {
 		set rooms($room) [list]
-		set rooms(mode,$room) "nst"
+		set rooms(mode,$room) "nt"
 		set canjoin 2
 		set newchan 1
 	} }
 	if {[hasmode $room "i"]} {set canjoin 0}
 	if {$canjoin != 2} {
-		set canjoin 1
 		if {[info exists ::rooms(list,$room,b)]} {
 		foreach {banmask} $::rooms(list,$room,b) {
 			if {[string match -nocase $banmask "$::dispnames($fd)!$::idents($fd)@$::hostnames($fd)"]} {
@@ -425,6 +440,16 @@ proc chan'adduser {fd room {apass ""}} {
 	chan'topic $fd $room -
 }
 
+proc chan'ls {src} {
+	foreach {room lusers} [array get ::rooms] {
+		if {[hasmode $room "s"]} {continue}
+		if {[string match "*,*" $room]} {continue}
+		if {[info exists rooms(topic,$room)]} {set m 332;set t $rooms(topic,$room)} {set m 331;set t " "}
+		message'fd $src "$::config::me(server)" [list "322" [getnickbyfd $src] $room [llength $lusers] $t]
+	}
+	message'fd $src "$::config::me(server)" [list "323" [getnickbyfd $src] "End of /LIST reply."]
+}
+
 proc chan'canchgmode {src room state modeletter {param ""}} {
 	if {[llength $::rooms($room)] == 0} {
 		return 1
@@ -449,6 +474,8 @@ proc whois {fd nick {xtra "0"}} {
 	if {!([getfdbynick $nick] == "")} {
 		set fini [getfdbynick $nick]
 		message'fd $fd "$::config::me(server)" [list "311" [getnickbyfd $fd] "$nick" "$::idents($fini)" "$::hostnames($fini)" "*" "$::realnames($fini)"]
+		message'fd $fd "$::config::me(server)" [list "319" [getnickbyfd $fd] "$nick" "Cannot show due to TCL error. :P"]
+		if {$xtra} {message'fd $fd "$::config::me(server)" [list "378" [getnickbyfd $fd] "$nick" "is connecting from *@$::rhostnames($fini) $::rhostnames($fini)"]}
 		message'fd $fd "$::config::me(server)" [list "318" [getnickbyfd $fd] "$nick" "End of WHOIS list."]
 	}
 }
@@ -535,6 +562,13 @@ proc chan'chgmode {src room state modeletter param} {
 	}
 }
 
+proc sendtoallumode {mode src zarg} {
+	foreach {k v} [array get ::modes] {
+		if {![string match "*${mode}*" $v]} {continue}
+		message'fd $k $src $zarg
+	}
+}
+
 proc chan'retmode {room} {
 	if {[info exists ::rooms(mode,$room)]} {
 		return $::rooms(mode,$room)
@@ -585,7 +619,11 @@ proc client'reg {chan addr} {
 		}
 
 		"whois" {
-			if {[lindex $msg 1] != ""} {whois $chan [lindex $msg 1] 0}
+			if {[lindex $msg 1] != ""} {whois $chan [lindex $msg 1] [string match "*o*" $::modes($chan)]}
+		}
+
+		"list" {
+			chan'ls $chan
 		}
 
 		"who" {
@@ -702,6 +740,11 @@ proc client'reg {chan addr} {
 		"kick"	{
 			set zhan [getfdbynick [lindex $msg 2]]
 			foreach {chn} [split [lindex $msg 1] ","] {
+				if {[string match "*S*" $::modes($zhan)]} {
+					message'fdnoc $src "$::config::me(server)" [list "484" $room $param "Cannot kick or deop a service"]
+					return
+				}
+
 				if {![chan'canchgmode $chan $chn "+" "h"]} {continue}
 				if {![chan'canchgmode $chan $chn "+" "o"] && [chan'canchgmode $zhan $chn "+" "o"]} {continue}
 				set rooms($chn) [lreplace $rooms($chn) [lsearch -exact $rooms($chn) $zhan] [lsearch -exact $rooms($chn) $zhan]]
@@ -766,6 +809,7 @@ proc client'err {chan addr nick reason} {
 	chan close $chan
 	client'eoc $chan "$reason"
 	foreach {room nqls} [array get ::rooms] {
+		if {[string match "list,*" $room]} {continue}
 		if {[lsearch -exact $nqls $chan] != -1} {set rooms($room) [lreplace $nqls [lsearch -exact $nqls $chan] [lsearch -exact $nqls $chan]]}
 		if {[lsearch -exact $nqls $chan] != -1} {set rooms(list,$room,o) [lreplace $rooms(list,$room,o) [lsearch -exact $rooms(list,$room,o) $chan] [lsearch -exact $rooms(list,$room,o) $chan]]}
 		if {[lsearch -exact $nqls $chan] != -1} {set rooms(list,$room,h) [lreplace $rooms(list,$room,h) [lsearch -exact $rooms(list,$room,h) $chan] [lsearch -exact $rooms(list,$room,h) $chan]]}
