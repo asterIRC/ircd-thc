@@ -75,11 +75,11 @@ proc rand {minn maxx} {
 	set bytes [read $fp 6]
 	close $fp
 	scan $bytes %c%c%c%c%c%c ca co ce cu ci ch
-	set co [expr {$co + (2 ** 8)}]
-	set ce [expr {$ce + (2 ** 16)}]
-	set cu [expr {$cu + (2 ** 24)}]
-	set ci [expr {$ci + (2 ** 32)}]
-	set ch [expr {$ch + (2 ** 40)}]
+	set co [expr {$co + pow(2,8)}]
+	set ce [expr {$ce + pow(2,16)}]
+	set cu [expr {$cu + pow(2,24)}]
+	set ci [expr {$ci + pow(2,32)}]
+	set ch [expr {$ch + pow(2,40)}]
 	return [expr {$minn+(($ca+$co+$ce+$cu+$ci+$ch)%$maxnum)}]
 }
 
