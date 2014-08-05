@@ -10,7 +10,7 @@ package require sqlite3
 package require dns
 set opmodes "qaohv"
 
-source dict.tcl
+if {[catch {dict get {}} zun]} {source dict.tcl}
 
 sqlite3 ircdb ./irc.db
 ircdb eval {CREATE TABLE IF NOT EXISTS logins (uname text, pass text)}
@@ -641,7 +641,7 @@ proc whois {fd nick {xtra "0"}} {
 					foreach {x w} $v {message'fd $fd "$::config::me(server)" [list "309" [getnickbyfd $fd] "$nick" "Metadata: $x = $w"]}
 				}
 				if {$k=="account"} {
-					message'fd $fd "$::config::me(server)" [list "330" [getnickbyfd $fd] "$nick" "$v" "is authed as"]}
+					message'fd $fd "$::config::me(server)" [list "330" [getnickbyfd $fd] "$nick" "$v" "is authed as"]
 				}
 			}
 		}
