@@ -10,6 +10,8 @@ package require sqlite3
 package require dns
 set opmodes "qaohv"
 
+source dict.tcl
+
 sqlite3 ircdb ./irc.db
 ircdb eval {CREATE TABLE IF NOT EXISTS logins (uname text, pass text)}
 
