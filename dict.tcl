@@ -1,50 +1,50 @@
- # dict.tcl
- # http://wiki.tcl.tk/10609
- #
- # Tcl 8.4-compatible implementation of the [dict] command.
- #
- # Known deficiencies:
- # - In error messages, the variable name doesn't always appear correctly.  This
- #   is due to use of [upvar] which renames the variable.
- # - Tcl 8.4 offers no way for [return], [break], etc. inside the script to
- #   affect the caller.  [uplevel] doesn't quite do everything that's needed.
- # - Some usage error messages show different names for formal arguments.
- # - Performance is reduced.
- #
- # Test failures (prefix each name with "dict-"):
- # 3.12    4.5     5.7     9.7     9.8     11.15   12.7    12.8    12.10
- # 13.7    13.8    13.9    14.1    14.2    14.3    14.4    14.12   14.13
- # 14.22   15.9    15.10   15.11   16.8    16.9    16.17   16.18   17.13
- # 17.16   17.18   21.1    21.2    21.3    21.4    21.13   21.14   21.15
- # 22.1    22.2    22.3    22.10   22.14   22.15   23.1    23.2    24.1
- # 24.2    24.3    24.4    24.12   24.13   24.20.1 24.21   24.24   24.25
+# dict.tcl
+# http://wiki.tcl.tk/10609
+#
+# Tcl 8.4-compatible implementation of the [dict] command.
+#
+# Known deficiencies:
+# - In error messages, the variable name doesn't always appear correctly.  This
+#   is due to use of [upvar] which renames the variable.
+# - Tcl 8.4 offers no way for [return], [break], etc. inside the script to
+#   affect the caller.  [uplevel] doesn't quite do everything that's needed.
+# - Some usage error messages show different names for formal arguments.
+# - Performance is reduced.
+#
+# Test failures (prefix each name with "dict-"):
+# 3.12    4.5     5.7     9.7     9.8     11.15   12.7    12.8    12.10
+# 13.7    13.8    13.9    14.1    14.2    14.3    14.4    14.12   14.13
+# 14.22   15.9    15.10   15.11   16.8    16.9    16.17   16.18   17.13
+# 17.16   17.18   21.1    21.2    21.3    21.4    21.13   21.14   21.15
+# 22.1    22.2    22.3    22.10   22.14   22.15   23.1    23.2    24.1
+# 24.2    24.3    24.4    24.12   24.13   24.20.1 24.21   24.24   24.25
 
- # Only create [dict] command if it doesn't already exist.
- if {[catch {dict get {}}]} {
-     # Tcl 8.4-style implementation of namespace ensembles.
-     namespace eval ::dict {}
-     proc ::dict {subcommand args} {
-         # Confirm $subcommand is a [dict] command or unambiguous prefix thereof.
-         if {[regexp {[][*?\\]} $subcommand]
-          || [llength [set command [info commands ::dict::$subcommand*]]] != 1} {
-             set commands [string map {::dict:: {}}\
-                     [lsort [info commands ::dict::*]]]
-             if {[llength $commands] > 1} {
-                 lset commands end "or [lindex $commands end]"
-             }
-             if {[llength $commands] > 2} {
-                 set commands [join $commands ", "]
-             } else {
-                 set commands [join $commands " "]
-             }
-             error "unknown or ambiguous subcommand \"$subcommand\":\
-                     must be $commands"
-         }
+# Only create [dict] command if it doesn't already exist.
+if {[catch {dict get {}}]} {
+    # Tcl 8.4-style implementation of namespace ensembles.
+    namespace eval ::dict {}
+    proc ::dict {subcommand args} {
+        # Confirm $subcommand is a [dict] command or unambiguous prefix thereof.
+        if {[regexp {[][*?\\]} $subcommand]
+         || [llength [set command [info commands ::dict::$subcommand*]]] != 1} {
+            set commands [string map {::dict:: {}}\
+                    [lsort [info commands ::dict::*]]]
+            if {[llength $commands] > 1} {
+                lset commands end "or [lindex $commands end]"
+            }
+            if {[llength $commands] > 2} {
+                set commands [join $commands ", "]
+            } else {
+                set commands [join $commands " "]
+            }
+            error "unknown or ambiguous subcommand \"$subcommand\":\
+                    must be $commands"
+        }
 
-         # Invoke the command.
-         if {[catch {uplevel 1 [concat [list $command] $args]} msg]} {
-             # Rewrite the command name on error.
-             regsub {^(wrong # args: should be \")::(dict)::} $msg {\1\2 } msg
+        # Invoke the command.
+        if {[catch {uplevel 1 [concat [list $command] $args]} msg]} {
+            # Rewrite the command name on error.
+            regsub {^(wrong # args: should be \")::(dict)::} $msg {\1\2 } msg
             error $msg
         } else {
             return $msg
@@ -201,7 +201,6 @@
     proc ::dict::incr {varName key {increment 1}} {
         upvar 1 $varName var
 
-
         # Disallow non-integer increments.
         if {![string is integer -strict $increment]} {
             error "expected integer but got \"$increment\""
@@ -323,7 +322,6 @@
                     break
                 }
                 ::incr i -2
-            }
             }
         }
         return $dictionary
@@ -630,4 +628,3 @@
         return $result
     }
 }
-
