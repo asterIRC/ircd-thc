@@ -80,7 +80,7 @@ proc rand {minn maxx} {
 	set cu [expr {$cu + pow(2,24)}]
 	set ci [expr {$ci + pow(2,32)}]
 	set ch [expr {$ch + pow(2,40)}]
-	return [expr {$minn+(($ca+$co+$ce+$cu+$ci+$ch)%$maxnum)}]
+	return [expr {$minn+(int($ca+$co+$ce+$cu+$ci+$ch)%$maxnum)}]
 }
 
 proc makessl {fd} {
