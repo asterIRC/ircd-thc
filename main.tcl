@@ -404,7 +404,7 @@ proc client`unreg`nick {chan msg} {
 	global dispnames idents
 	if {[getfdbynick [lindex $msg 1]] != ""} {
 		message'fd $chan $::config::me(server) [list "433" "*" [lindex $msg 1] "The nickname you have chosen is already in use. Forcing nick change to a random nick."]
-		return
+		#return
 		client`randnick $chan
 	}
 	if {[lindex $msg 1] == ""} {
