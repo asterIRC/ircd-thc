@@ -75,11 +75,11 @@ proc rand {minn maxx} {
 	set bytes [read $fp 6]
 	close $fp
 	scan $bytes %c%c%c%c%c%c ca co ce cu ci ch
-	set co [expr {$co * (2 ** 8)}]
-	set ce [expr {$ce * (2 ** 16)}]
-	set cu [expr {$cu * (2 ** 24)}]
-	set ci [expr {$ci * (2 ** 32)}]
-	set ch [expr {$ch * (2 ** 40)}]
+	set co [expr {$co + (2 ** 8)}]
+	set ce [expr {$ce + (2 ** 16)}]
+	set cu [expr {$cu + (2 ** 24)}]
+	set ci [expr {$ci + (2 ** 32)}]
+	set ch [expr {$ch + (2 ** 40)}]
 	return [expr {$minn+(($ca+$co+$ce+$cu+$ci+$ch)%$maxnum)}]
 }
 
@@ -404,6 +404,7 @@ proc client`unreg`nick {chan msg} {
 	global dispnames idents
 	if {[getfdbynick [lindex $msg 1]] != ""} {
 		message'fd $chan $::config::me(server) [list "433" "*" [lindex $msg 1] "The nickname you have chosen is already in use. Forcing nick change to a random nick."]
+		return
 		client`randnick $chan
 	}
 	if {[lindex $msg 1] == ""} {
