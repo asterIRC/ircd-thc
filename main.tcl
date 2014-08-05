@@ -106,13 +106,6 @@ proc accept {chan addr port} {
 		set dnslen 0
 		set wddr "."
 	}
-	if {$dnslen} {
-		set dnsddr [join [lreverse [split [join [split $addr ":"]] {}]] "."]
-		putss stdout $dnsddr
-	} {
-		set dnsddr [join [lreverse [split $addr "."]] "."]
-		putss stdout $dnsddr
-	}
 	set yddr [split $addr "$wddr"]
 	set zddr ""
 	if {$xddr} {foreach {x y} $yddr {
