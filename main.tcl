@@ -129,7 +129,7 @@ proc accept {chan addr port} {
 	append modes($chan) "x"
 	append zddr "IP"
 	set hostnames($chan) $zddr
-	chan configure $chan -buffering line -blocking 0
+	fconfigure $chan -buffering line -blocking 0
 	putss $chan ":$::config::me(server) 020 * :$::config::me(welcome)"
 	fileevent $chan readable [list client'unreg $chan $addr]
 }
@@ -171,9 +171,9 @@ proc accept-ssl {chan addr port} {
 	} }
 	append zddr "IP"
 	set hostnames($chan) $zddr
-	chan configure $chan -buffering line -blocking 1
+	fconfigure $chan -buffering line -blocking 1
 	::tls::handshake $chan
-	chan configure $chan -buffering line -blocking 0
+	fconfigure $chan -buffering line -blocking 0
 	append modes($chan) "x"
 
 	putss $chan ":$::config::me(server) 020 * :$::config::me(welcome)"
