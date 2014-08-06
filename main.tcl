@@ -777,7 +777,6 @@ proc client'rreg {chan msg} {
 
 		"pong" {
 			set pings($chan) 1
-			message'fd $chan "$::config::me(server)" [list "NOTICE" "*" "Ping? Pong!"]
 		}
 
 		"away" {
@@ -956,7 +955,7 @@ proc client'rreg {chan msg} {
 		"umetadata" {
 			set k [lindex $msg 1]
 			set v [lindex $msg 2]
-			if {$v==""} {dict unset extinfo($chan) umetadata $k} {dict set extinfo($chan) umetadata $k $v}
+			if {$v==""} {catch {dict unset extinfo($chan) umetadata $k} zuzu} {dict set extinfo($chan) umetadata $k $v}
 			message'fd $chan "$::config::me(server)" [list "NOTICE" $::dispnames($chan) "New umetadata line: $k = $v"]
 		}
 
@@ -1182,7 +1181,7 @@ proc client'eoc {chan reason} {
 	unset hostnames($chan)
 	unset rhostnames($chan)
 	if {[info exists extinfo($chan)]} {unset extinfo($chan)}
-	if {[info exists modes($chan)]} {unset modes($chan)},
+	if {[info exists modes($chan)]} {unset modes($chan)}
 }
 
 proc message'send {nick src zarg} {
