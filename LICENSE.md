@@ -1,4 +1,4 @@
-This software is copyrighted by j4jackj (Jack Johnson <j4jackj@gmx.com>).
+This software is copyright of Ellenor (<ellenor@umbrellix.net>).
 All other authors will be listed here as the need arises.
 
 The authors hereby grant permission to use, copy, modify, distribute,
